@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Place = {
   name: string;
@@ -56,7 +56,12 @@ export function TravelMoment() {
   const [recRemain, setRecRemain] = useState(3);
   const [recProgress, setRecProgress] = useState(0);
   const [blink, setBlink] = useState(true);
-  const [recordedThumbs, setRecordedThumbs] = useState<number>(0);
+  const [clips, setClips] = useState<string[]>([]); // object URLs of recorded videos
+  const [activeClipIdx, setActiveClipIdx] = useState<number>(0);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordedThumbs = clips.length;
 
   // New trip form
   const [newTripName, setNewTripName] = useState("");
@@ -154,9 +159,122 @@ export function TravelMoment() {
     );
   };
 
-  // Recording effect
+  // Cleanup object URLs on unmount
   useEffect(() => {
-    if (recState !== 1) return;
+    return () => {
+      clips.forEach((u) => URL.revokeObjectURL(u));
+      stopStream();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stopStream = () => {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      try {
+        recorderRef.current.stop();
+      } catch {}
+    }
+    recorderRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const pickMimeType = (): string | undefined => {
+    if (typeof MediaRecorder === "undefined") return undefined;
+    const candidates = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+      "video/mp4",
+    ];
+    return candidates.find((c) => MediaRecorder.isTypeSupported(c));
+  };
+
+  const startRec = async () => {
+    if (recState !== 0) return;
+
+    // Try real camera; fall back to simulation
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      runSimulatedRec();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      setRecState(1);
+
+      // Attach to preview
+      requestAnimationFrame(() => {
+        const v = videoPreviewRef.current;
+        if (v) {
+          v.srcObject = stream;
+          v.muted = true;
+          v.playsInline = true;
+          v.play().catch(() => {});
+        }
+      });
+
+      const mimeType = pickMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType || "video/webm" });
+        const url = URL.createObjectURL(blob);
+        setClips((c) => {
+          setActiveClipIdx(c.length);
+          return [...c, url];
+        });
+        setRecState(2);
+        // stop tracks
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+      };
+
+      recorder.start();
+
+      // 3-second progress
+      let elapsed = 0;
+      setRecProgress(0);
+      setRecRemain(3);
+      const blinkI = setInterval(() => setBlink((b) => !b), 500);
+      const recI = setInterval(() => {
+        elapsed += 100;
+        setRecProgress((elapsed / 3000) * 100);
+        setRecRemain(Math.max(0, Math.ceil((3000 - elapsed) / 1000)));
+        if (elapsed >= 3000) {
+          clearInterval(recI);
+          clearInterval(blinkI);
+          if (recorder.state === "recording") {
+            try {
+              recorder.stop();
+            } catch {}
+          }
+        }
+      }, 100);
+    } catch (err) {
+      console.warn("Camera unavailable, falling back to simulation", err);
+      showToast("카메라 권한이 없어 시뮬레이션으로 진행해요");
+      runSimulatedRec();
+    }
+  };
+
+  const runSimulatedRec = () => {
+    setRecState(1);
     let elapsed = 0;
     setRecProgress(0);
     setRecRemain(3);
@@ -169,18 +287,18 @@ export function TravelMoment() {
         clearInterval(recI);
         clearInterval(blinkI);
         setRecState(2);
-        setRecordedThumbs((n) => n + 1);
+        setClips((c) => {
+          setActiveClipIdx(c.length);
+          return [...c, ""]; // empty url = simulated
+        });
       }
     }, 100);
-    return () => {
-      clearInterval(recI);
-      clearInterval(blinkI);
-    };
-  }, [recState]);
+  };
 
-  const startRec = () => {
-    if (recState !== 0) return;
-    setRecState(1);
+  const resetRec = () => {
+    setRecState(0);
+    setRecProgress(0);
+    setRecRemain(3);
   };
 
   const trip = trips[currentTripIdx];
@@ -218,8 +336,12 @@ export function TravelMoment() {
               recRemain={recRemain}
               recProgress={recProgress}
               blink={blink}
-              recordedThumbs={recordedThumbs}
+              clips={clips}
+              activeClipIdx={activeClipIdx}
+              setActiveClipIdx={setActiveClipIdx}
+              videoPreviewRef={videoPreviewRef}
               onStartRec={startRec}
+              onResetRec={resetRec}
               onAdd={openSheet}
             />
           )}
@@ -390,18 +512,30 @@ function DetailView({
   recRemain,
   recProgress,
   blink,
-  recordedThumbs,
+  clips,
+  activeClipIdx,
+  setActiveClipIdx,
+  videoPreviewRef,
   onStartRec,
+  onResetRec,
   onAdd,
 }: {
   recState: RecState;
   recRemain: number;
   recProgress: number;
   blink: boolean;
-  recordedThumbs: number;
+  clips: string[];
+  activeClipIdx: number;
+  setActiveClipIdx: (i: number) => void;
+  videoPreviewRef: React.RefObject<HTMLVideoElement | null>;
   onStartRec: () => void;
+  onResetRec: () => void;
   onAdd: () => void;
 }) {
+  const recordedThumbs = clips.length;
+  const activeClipUrl = clips[activeClipIdx];
+  const playbackRef = useRef<HTMLVideoElement | null>(null);
+
   return (
     <div>
       <div className="flex items-center gap-2 border-b border-border px-[14px] pb-2 pt-[10px]">
@@ -466,11 +600,11 @@ function DetailView({
             {recordedThumbs > 0 ? `영상 ${recordedThumbs}개` : "영상 없음"}
           </span>
         </div>
-        <div className="relative w-full overflow-hidden rounded-[10px] border border-border bg-muted aspect-video">
-          {recState === 0 && (
+        <div className="relative w-full overflow-hidden rounded-[10px] border border-border bg-black aspect-video">
+          {recState === 0 && !activeClipUrl && (
             <div
               onClick={onStartRec}
-              className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-[10px]"
+              className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-[10px] bg-muted"
             >
               <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full border-2 border-primary transition-colors hover:border-primary-strong">
                 <div className="h-[18px] w-[18px] rounded-full bg-rec" />
@@ -478,60 +612,106 @@ function DetailView({
               <span className="text-[11px] text-muted-foreground">눌러서 3초 영상 촬영</span>
             </div>
           )}
+
           {recState === 1 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#111]">
-              <div
-                className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
-                style={{ opacity: blink ? 1 : 0 }}
+            <>
+              <video
+                ref={videoPreviewRef}
+                className="absolute inset-0 h-full w-full object-cover"
+                autoPlay
+                muted
+                playsInline
               />
-              <div className="absolute left-6 top-[10px] text-[10px] text-white/60">REC</div>
-              <div className="text-[48px] font-bold text-white">{recRemain > 0 ? recRemain : ""}</div>
-              <div className="h-[3px] w-[65%] overflow-hidden rounded bg-white/20">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
                 <div
-                  className="h-full bg-rec transition-all"
-                  style={{ width: `${recProgress}%` }}
+                  className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
+                  style={{ opacity: blink ? 1 : 0 }}
                 />
+                <div className="absolute left-6 top-[10px] text-[10px] font-semibold text-white drop-shadow">
+                  REC
+                </div>
+                <div className="text-[48px] font-bold text-white drop-shadow-lg">
+                  {recRemain > 0 ? recRemain : ""}
+                </div>
+                <div className="absolute bottom-3 h-[3px] w-[65%] overflow-hidden rounded bg-white/30">
+                  <div
+                    className="h-full bg-rec transition-all"
+                    style={{ width: `${recProgress}%` }}
+                  />
+                </div>
               </div>
-            </div>
+            </>
           )}
-          {recState === 2 && (
-            <div className="absolute inset-0 cursor-pointer">
-              <svg viewBox="0 0 160 90" className="h-full w-full">
-                <rect width="160" height="90" fill="#1a1a2e" />
-                <rect x="0" y="18" width="160" height="54" fill="#16213e" />
-                <circle cx="80" cy="45" r="28" fill="#0f3460" opacity="0.8" />
-                <circle cx="80" cy="45" r="16" fill="#533483" opacity="0.6" />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-start justify-end bg-gradient-to-t from-black/50 to-transparent p-3">
-                <span className="mb-1 rounded-full bg-primary/90 px-2 py-[3px] text-[10px] text-white">
+
+          {recState === 2 && activeClipUrl && (
+            <>
+              <video
+                ref={playbackRef}
+                key={activeClipUrl}
+                src={activeClipUrl}
+                className="absolute inset-0 h-full w-full object-cover"
+                controls
+                playsInline
+                onClick={(e) => {
+                  const v = e.currentTarget;
+                  if (v.paused) v.play();
+                  else v.pause();
+                }}
+              />
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent p-2">
+                <span className="rounded-full bg-primary/90 px-2 py-[3px] text-[10px] text-white">
                   REC · 3초
                 </span>
-                <span className="text-[12px] font-semibold text-white">Kinefuku Asakusa Sweets</span>
+                <span className="text-[11px] font-semibold text-white drop-shadow">
+                  Kinefuku
+                </span>
               </div>
-              <div className="absolute left-1/2 top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[1.5px] border-white/50 bg-white/15 backdrop-blur-sm">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-              </div>
+            </>
+          )}
+
+          {recState === 2 && !activeClipUrl && (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e] text-[11px] text-white/60">
+              (시뮬레이션 영상)
             </div>
           )}
         </div>
+
         <div className="mt-2 flex gap-[6px]">
-          {Array.from({ length: recordedThumbs }).map((_, i) => (
-            <div
+          {clips.map((url, i) => (
+            <button
               key={i}
+              onClick={() => {
+                if (recState === 1) return;
+                setActiveClipIdx(i);
+                if (recState !== 2) onResetRec();
+              }}
               className={`h-[54px] w-[54px] flex-shrink-0 overflow-hidden rounded-[7px] ${
-                i === 0 ? "border-[1.5px] border-primary" : "border border-border"
+                i === activeClipIdx && recState === 2
+                  ? "border-[1.5px] border-primary"
+                  : "border border-border"
               }`}
             >
-              <svg viewBox="0 0 54 54" className="h-full w-full">
-                <rect width="54" height="54" fill="#1a1a2e" />
-                <polygon points="21,15 41,27 21,39" fill="rgba(255,255,255,0.7)" />
-              </svg>
-            </div>
+              {url ? (
+                <video
+                  src={url}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <svg viewBox="0 0 54 54" className="h-full w-full">
+                  <rect width="54" height="54" fill="#1a1a2e" />
+                  <polygon points="21,15 41,27 21,39" fill="rgba(255,255,255,0.7)" />
+                </svg>
+              )}
+            </button>
           ))}
           <div
-            onClick={onStartRec}
+            onClick={() => {
+              if (recState !== 0) onResetRec();
+              setTimeout(onStartRec, 0);
+            }}
             className="flex h-[54px] w-[54px] flex-shrink-0 cursor-pointer items-center justify-center rounded-[7px] border border-dashed border-border text-[20px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
           >
             +
