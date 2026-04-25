@@ -512,18 +512,30 @@ function DetailView({
   recRemain,
   recProgress,
   blink,
-  recordedThumbs,
+  clips,
+  activeClipIdx,
+  setActiveClipIdx,
+  videoPreviewRef,
   onStartRec,
+  onResetRec,
   onAdd,
 }: {
   recState: RecState;
   recRemain: number;
   recProgress: number;
   blink: boolean;
-  recordedThumbs: number;
+  clips: string[];
+  activeClipIdx: number;
+  setActiveClipIdx: (i: number) => void;
+  videoPreviewRef: React.RefObject<HTMLVideoElement | null>;
   onStartRec: () => void;
+  onResetRec: () => void;
   onAdd: () => void;
 }) {
+  const recordedThumbs = clips.length;
+  const activeClipUrl = clips[activeClipIdx];
+  const playbackRef = useRef<HTMLVideoElement | null>(null);
+
   return (
     <div>
       <div className="flex items-center gap-2 border-b border-border px-[14px] pb-2 pt-[10px]">
@@ -588,11 +600,11 @@ function DetailView({
             {recordedThumbs > 0 ? `영상 ${recordedThumbs}개` : "영상 없음"}
           </span>
         </div>
-        <div className="relative w-full overflow-hidden rounded-[10px] border border-border bg-muted aspect-video">
-          {recState === 0 && (
+        <div className="relative w-full overflow-hidden rounded-[10px] border border-border bg-black aspect-video">
+          {recState === 0 && !activeClipUrl && (
             <div
               onClick={onStartRec}
-              className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-[10px]"
+              className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center gap-[10px] bg-muted"
             >
               <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full border-2 border-primary transition-colors hover:border-primary-strong">
                 <div className="h-[18px] w-[18px] rounded-full bg-rec" />
@@ -600,60 +612,106 @@ function DetailView({
               <span className="text-[11px] text-muted-foreground">눌러서 3초 영상 촬영</span>
             </div>
           )}
+
           {recState === 1 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#111]">
-              <div
-                className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
-                style={{ opacity: blink ? 1 : 0 }}
+            <>
+              <video
+                ref={videoPreviewRef}
+                className="absolute inset-0 h-full w-full object-cover"
+                autoPlay
+                muted
+                playsInline
               />
-              <div className="absolute left-6 top-[10px] text-[10px] text-white/60">REC</div>
-              <div className="text-[48px] font-bold text-white">{recRemain > 0 ? recRemain : ""}</div>
-              <div className="h-[3px] w-[65%] overflow-hidden rounded bg-white/20">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
                 <div
-                  className="h-full bg-rec transition-all"
-                  style={{ width: `${recProgress}%` }}
+                  className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
+                  style={{ opacity: blink ? 1 : 0 }}
                 />
+                <div className="absolute left-6 top-[10px] text-[10px] font-semibold text-white drop-shadow">
+                  REC
+                </div>
+                <div className="text-[48px] font-bold text-white drop-shadow-lg">
+                  {recRemain > 0 ? recRemain : ""}
+                </div>
+                <div className="absolute bottom-3 h-[3px] w-[65%] overflow-hidden rounded bg-white/30">
+                  <div
+                    className="h-full bg-rec transition-all"
+                    style={{ width: `${recProgress}%` }}
+                  />
+                </div>
               </div>
-            </div>
+            </>
           )}
-          {recState === 2 && (
-            <div className="absolute inset-0 cursor-pointer">
-              <svg viewBox="0 0 160 90" className="h-full w-full">
-                <rect width="160" height="90" fill="#1a1a2e" />
-                <rect x="0" y="18" width="160" height="54" fill="#16213e" />
-                <circle cx="80" cy="45" r="28" fill="#0f3460" opacity="0.8" />
-                <circle cx="80" cy="45" r="16" fill="#533483" opacity="0.6" />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-start justify-end bg-gradient-to-t from-black/50 to-transparent p-3">
-                <span className="mb-1 rounded-full bg-primary/90 px-2 py-[3px] text-[10px] text-white">
+
+          {recState === 2 && activeClipUrl && (
+            <>
+              <video
+                ref={playbackRef}
+                key={activeClipUrl}
+                src={activeClipUrl}
+                className="absolute inset-0 h-full w-full object-cover"
+                controls
+                playsInline
+                onClick={(e) => {
+                  const v = e.currentTarget;
+                  if (v.paused) v.play();
+                  else v.pause();
+                }}
+              />
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent p-2">
+                <span className="rounded-full bg-primary/90 px-2 py-[3px] text-[10px] text-white">
                   REC · 3초
                 </span>
-                <span className="text-[12px] font-semibold text-white">Kinefuku Asakusa Sweets</span>
+                <span className="text-[11px] font-semibold text-white drop-shadow">
+                  Kinefuku
+                </span>
               </div>
-              <div className="absolute left-1/2 top-1/2 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[1.5px] border-white/50 bg-white/15 backdrop-blur-sm">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-              </div>
+            </>
+          )}
+
+          {recState === 2 && !activeClipUrl && (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e] text-[11px] text-white/60">
+              (시뮬레이션 영상)
             </div>
           )}
         </div>
+
         <div className="mt-2 flex gap-[6px]">
-          {Array.from({ length: recordedThumbs }).map((_, i) => (
-            <div
+          {clips.map((url, i) => (
+            <button
               key={i}
+              onClick={() => {
+                if (recState === 1) return;
+                setActiveClipIdx(i);
+                if (recState !== 2) onResetRec();
+              }}
               className={`h-[54px] w-[54px] flex-shrink-0 overflow-hidden rounded-[7px] ${
-                i === 0 ? "border-[1.5px] border-primary" : "border border-border"
+                i === activeClipIdx && recState === 2
+                  ? "border-[1.5px] border-primary"
+                  : "border border-border"
               }`}
             >
-              <svg viewBox="0 0 54 54" className="h-full w-full">
-                <rect width="54" height="54" fill="#1a1a2e" />
-                <polygon points="21,15 41,27 21,39" fill="rgba(255,255,255,0.7)" />
-              </svg>
-            </div>
+              {url ? (
+                <video
+                  src={url}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
+                <svg viewBox="0 0 54 54" className="h-full w-full">
+                  <rect width="54" height="54" fill="#1a1a2e" />
+                  <polygon points="21,15 41,27 21,39" fill="rgba(255,255,255,0.7)" />
+                </svg>
+              )}
+            </button>
           ))}
           <div
-            onClick={onStartRec}
+            onClick={() => {
+              if (recState !== 0) onResetRec();
+              setTimeout(onStartRec, 0);
+            }}
             className="flex h-[54px] w-[54px] flex-shrink-0 cursor-pointer items-center justify-center rounded-[7px] border border-dashed border-border text-[20px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
           >
             +
