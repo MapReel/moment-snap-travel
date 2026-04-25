@@ -159,9 +159,122 @@ export function TravelMoment() {
     );
   };
 
-  // Recording effect
+  // Cleanup object URLs on unmount
   useEffect(() => {
-    if (recState !== 1) return;
+    return () => {
+      clips.forEach((u) => URL.revokeObjectURL(u));
+      stopStream();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stopStream = () => {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      try {
+        recorderRef.current.stop();
+      } catch {}
+    }
+    recorderRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const pickMimeType = (): string | undefined => {
+    if (typeof MediaRecorder === "undefined") return undefined;
+    const candidates = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+      "video/mp4",
+    ];
+    return candidates.find((c) => MediaRecorder.isTypeSupported(c));
+  };
+
+  const startRec = async () => {
+    if (recState !== 0) return;
+
+    // Try real camera; fall back to simulation
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      runSimulatedRec();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      setRecState(1);
+
+      // Attach to preview
+      requestAnimationFrame(() => {
+        const v = videoPreviewRef.current;
+        if (v) {
+          v.srcObject = stream;
+          v.muted = true;
+          v.playsInline = true;
+          v.play().catch(() => {});
+        }
+      });
+
+      const mimeType = pickMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType || "video/webm" });
+        const url = URL.createObjectURL(blob);
+        setClips((c) => {
+          setActiveClipIdx(c.length);
+          return [...c, url];
+        });
+        setRecState(2);
+        // stop tracks
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+      };
+
+      recorder.start();
+
+      // 3-second progress
+      let elapsed = 0;
+      setRecProgress(0);
+      setRecRemain(3);
+      const blinkI = setInterval(() => setBlink((b) => !b), 500);
+      const recI = setInterval(() => {
+        elapsed += 100;
+        setRecProgress((elapsed / 3000) * 100);
+        setRecRemain(Math.max(0, Math.ceil((3000 - elapsed) / 1000)));
+        if (elapsed >= 3000) {
+          clearInterval(recI);
+          clearInterval(blinkI);
+          if (recorder.state === "recording") {
+            try {
+              recorder.stop();
+            } catch {}
+          }
+        }
+      }, 100);
+    } catch (err) {
+      console.warn("Camera unavailable, falling back to simulation", err);
+      showToast("카메라 권한이 없어 시뮬레이션으로 진행해요");
+      runSimulatedRec();
+    }
+  };
+
+  const runSimulatedRec = () => {
+    setRecState(1);
     let elapsed = 0;
     setRecProgress(0);
     setRecRemain(3);
@@ -174,18 +287,18 @@ export function TravelMoment() {
         clearInterval(recI);
         clearInterval(blinkI);
         setRecState(2);
-        setRecordedThumbs((n) => n + 1);
+        setClips((c) => {
+          setActiveClipIdx(c.length);
+          return [...c, ""]; // empty url = simulated
+        });
       }
     }, 100);
-    return () => {
-      clearInterval(recI);
-      clearInterval(blinkI);
-    };
-  }, [recState]);
+  };
 
-  const startRec = () => {
-    if (recState !== 0) return;
-    setRecState(1);
+  const resetRec = () => {
+    setRecState(0);
+    setRecProgress(0);
+    setRecRemain(3);
   };
 
   const trip = trips[currentTripIdx];
