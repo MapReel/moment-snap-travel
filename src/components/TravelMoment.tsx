@@ -336,8 +336,12 @@ export function TravelMoment() {
               recRemain={recRemain}
               recProgress={recProgress}
               blink={blink}
-              recordedThumbs={recordedThumbs}
+              clips={clips}
+              activeClipIdx={activeClipIdx}
+              setActiveClipIdx={setActiveClipIdx}
+              videoPreviewRef={videoPreviewRef}
               onStartRec={startRec}
+              onResetRec={resetRec}
               onAdd={openSheet}
             />
           )}
