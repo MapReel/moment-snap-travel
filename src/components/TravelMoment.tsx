@@ -785,24 +785,35 @@ function DetailView({
                 muted
                 playsInline
               />
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
-                <div
-                  className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
-                  style={{ opacity: blink ? 1 : 0 }}
-                />
-                <div className="absolute left-6 top-[10px] text-[10px] font-semibold text-white drop-shadow">
-                  REC
-                </div>
-                <div className="text-[48px] font-bold text-white drop-shadow-lg">
-                  {recRemain > 0 ? recRemain : ""}
-                </div>
-                <div className="absolute bottom-3 h-[3px] w-[65%] overflow-hidden rounded bg-white/30">
+              {countdown > 0 ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30">
                   <div
-                    className="h-full bg-rec transition-all"
-                    style={{ width: `${recProgress}%` }}
-                  />
+                    key={countdown}
+                    className="animate-in zoom-in-50 fade-in text-[120px] font-bold text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
+                  >
+                    {countdown}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+                  <div
+                    className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
+                    style={{ opacity: blink ? 1 : 0 }}
+                  />
+                  <div className="absolute left-6 top-[10px] text-[10px] font-semibold text-white drop-shadow">
+                    REC
+                  </div>
+                  <div className="text-[48px] font-bold text-white drop-shadow-lg">
+                    {recRemain > 0 ? recRemain : ""}
+                  </div>
+                  <div className="absolute bottom-3 h-[3px] w-[65%] overflow-hidden rounded bg-white/30">
+                    <div
+                      className="h-full bg-rec transition-all"
+                      style={{ width: `${recProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 
