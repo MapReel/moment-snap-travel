@@ -63,6 +63,7 @@ export function TravelMoment() {
   const [recRemain, setRecRemain] = useState(3);
   const [recProgress, setRecProgress] = useState(0);
   const [blink, setBlink] = useState(true);
+  const [countdown, setCountdown] = useState<number>(0); // 3,2,1 → 0 means not counting
   const [clips, setClips] = useState<string[]>([]); // object URLs of recorded videos
   const [activeClipIdx, setActiveClipIdx] = useState<number>(0);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
@@ -271,6 +272,9 @@ export function TravelMoment() {
       });
       streamRef.current = stream;
       setRecState(1);
+      setCountdown(3);
+      setRecProgress(0);
+      setRecRemain(3);
 
       // Attach to preview
       requestAnimationFrame(() => {
@@ -283,53 +287,66 @@ export function TravelMoment() {
         }
       });
 
-      const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      recorderRef.current = recorder;
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType || "video/webm" });
-        const url = URL.createObjectURL(blob);
-        setClips((c) => {
-          setActiveClipIdx(c.length);
-          return [...c, url];
-        });
-        setRecState(2);
-        // stop tracks
-        stream.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        recorderRef.current = null;
-      };
-
-      recorder.start();
-
-      // 3-second progress
-      let elapsed = 0;
-      setRecProgress(0);
-      setRecRemain(3);
-      const blinkI = setInterval(() => setBlink((b) => !b), 500);
-      const recI = setInterval(() => {
-        elapsed += 100;
-        setRecProgress((elapsed / 3000) * 100);
-        setRecRemain(Math.max(0, Math.ceil((3000 - elapsed) / 1000)));
-        if (elapsed >= 3000) {
-          clearInterval(recI);
-          clearInterval(blinkI);
-          if (recorder.state === "recording") {
-            try {
-              recorder.stop();
-            } catch {}
-          }
+      // Countdown 3 → 2 → 1 → start recording
+      let cd = 3;
+      const cdI = setInterval(() => {
+        cd -= 1;
+        if (cd > 0) {
+          setCountdown(cd);
+        } else {
+          clearInterval(cdI);
+          setCountdown(0);
+          beginActualRecording(stream);
         }
-      }, 100);
+      }, 1000);
     } catch (err) {
       console.warn("Camera unavailable, falling back to simulation", err);
       showToast("카메라 권한이 없어 시뮬레이션으로 진행해요");
       runSimulatedRec();
     }
+  };
+
+  const beginActualRecording = (stream: MediaStream) => {
+    const mimeType = pickMimeType();
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    recorderRef.current = recorder;
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType || "video/webm" });
+      const url = URL.createObjectURL(blob);
+      setClips((c) => {
+        setActiveClipIdx(c.length);
+        return [...c, url];
+      });
+      setRecState(2);
+      stream.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      recorderRef.current = null;
+    };
+
+    recorder.start();
+
+    let elapsed = 0;
+    setRecProgress(0);
+    setRecRemain(3);
+    const blinkI = setInterval(() => setBlink((b) => !b), 500);
+    const recI = setInterval(() => {
+      elapsed += 100;
+      setRecProgress((elapsed / 3000) * 100);
+      setRecRemain(Math.max(0, Math.ceil((3000 - elapsed) / 1000)));
+      if (elapsed >= 3000) {
+        clearInterval(recI);
+        clearInterval(blinkI);
+        if (recorder.state === "recording") {
+          try {
+            recorder.stop();
+          } catch {}
+        }
+      }
+    }, 100);
   };
 
   const runSimulatedRec = () => {
@@ -358,6 +375,7 @@ export function TravelMoment() {
     setRecState(0);
     setRecProgress(0);
     setRecRemain(3);
+    setCountdown(0);
   };
 
   const trip = trips[currentTripIdx];
@@ -404,6 +422,7 @@ export function TravelMoment() {
               detailLoading={detailLoading}
               recState={recState}
               recRemain={recRemain}
+              countdown={countdown}
               recProgress={recProgress}
               blink={blink}
               clips={clips}
@@ -603,6 +622,7 @@ function DetailView({
   detailLoading,
   recState,
   recRemain,
+  countdown,
   recProgress,
   blink,
   clips,
@@ -618,6 +638,7 @@ function DetailView({
   detailLoading: boolean;
   recState: RecState;
   recRemain: number;
+  countdown: number;
   recProgress: number;
   blink: boolean;
   clips: string[];
@@ -764,24 +785,35 @@ function DetailView({
                 muted
                 playsInline
               />
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
-                <div
-                  className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
-                  style={{ opacity: blink ? 1 : 0 }}
-                />
-                <div className="absolute left-6 top-[10px] text-[10px] font-semibold text-white drop-shadow">
-                  REC
-                </div>
-                <div className="text-[48px] font-bold text-white drop-shadow-lg">
-                  {recRemain > 0 ? recRemain : ""}
-                </div>
-                <div className="absolute bottom-3 h-[3px] w-[65%] overflow-hidden rounded bg-white/30">
+              {countdown > 0 ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30">
                   <div
-                    className="h-full bg-rec transition-all"
-                    style={{ width: `${recProgress}%` }}
-                  />
+                    key={countdown}
+                    className="animate-in zoom-in-50 fade-in text-[120px] font-bold text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
+                  >
+                    {countdown}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+                  <div
+                    className="absolute left-[10px] top-[10px] h-2 w-2 rounded-full bg-rec transition-opacity"
+                    style={{ opacity: blink ? 1 : 0 }}
+                  />
+                  <div className="absolute left-6 top-[10px] text-[10px] font-semibold text-white drop-shadow">
+                    REC
+                  </div>
+                  <div className="text-[48px] font-bold text-white drop-shadow-lg">
+                    {recRemain > 0 ? recRemain : ""}
+                  </div>
+                  <div className="absolute bottom-3 h-[3px] w-[65%] overflow-hidden rounded bg-white/30">
+                    <div
+                      className="h-full bg-rec transition-all"
+                      style={{ width: `${recProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 
