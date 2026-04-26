@@ -75,6 +75,56 @@ export function TravelMoment() {
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
 
+  // Google Places state
+  const [searchQuery, setSearchQuery] = useState("Asakusa");
+  const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const searchPlacesFn = useServerFn(searchPlaces);
+  const getPlaceDetailsFn = useServerFn(getPlaceDetails);
+
+  // Debounced search
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchError(null);
+      return;
+    }
+    setSearchLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const { results, error } = await searchPlacesFn({ data: { query: q } });
+        setSearchResults(results);
+        setSearchError(error);
+      } catch (e) {
+        console.error(e);
+        setSearchError("검색 중 오류가 발생했어요");
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchQuery, searchPlacesFn]);
+
+  const openPlaceDetail = async (placeId: string) => {
+    setTab("detail");
+    setDetailLoading(true);
+    setSelectedPlace(null);
+    try {
+      const { place, error } = await getPlaceDetailsFn({ data: { placeId } });
+      if (error) showToast(error);
+      setSelectedPlace(place);
+    } catch (e) {
+      console.error(e);
+      showToast("상세 조회 중 오류가 발생했어요");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const showToast = (msg: string) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
