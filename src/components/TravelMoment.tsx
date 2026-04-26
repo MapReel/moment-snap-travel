@@ -388,9 +388,20 @@ export function TravelMoment() {
             ))}
           </div>
 
-          {tab === "search" && <SearchView onOpenDetail={() => setTab("detail")} />}
+          {tab === "search" && (
+            <SearchView
+              query={searchQuery}
+              setQuery={setSearchQuery}
+              loading={searchLoading}
+              error={searchError}
+              results={searchResults}
+              onOpenDetail={openPlaceDetail}
+            />
+          )}
           {tab === "detail" && (
             <DetailView
+              place={selectedPlace}
+              detailLoading={detailLoading}
               recState={recState}
               recRemain={recRemain}
               recProgress={recProgress}
@@ -402,6 +413,7 @@ export function TravelMoment() {
               onStartRec={startRec}
               onResetRec={resetRec}
               onAdd={openSheet}
+              onBack={() => setTab("search")}
             />
           )}
           {tab === "trip" && (
