@@ -422,6 +422,7 @@ export function TravelMoment() {
               detailLoading={detailLoading}
               recState={recState}
               recRemain={recRemain}
+              countdown={countdown}
               recProgress={recProgress}
               blink={blink}
               clips={clips}
