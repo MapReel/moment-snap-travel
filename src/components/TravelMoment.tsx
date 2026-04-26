@@ -187,11 +187,13 @@ export function TravelMoment() {
     setTimeout(() => setSheetOpen(false), 280);
   };
   const addToTrip = (idx: number) => {
+    const placeName = selectedPlace?.name ?? "장소";
+    const subType = selectedPlace?.primaryType ?? "장소";
     let already = false;
     setTrips((curr) =>
       curr.map((t, i) => {
         if (i !== idx) return t;
-        if (t.places.some((p) => p.name === "Kinefuku Asakusa Sweets")) {
+        if (t.places.some((p) => p.name === placeName)) {
           already = true;
           return t;
         }
@@ -200,8 +202,8 @@ export function TravelMoment() {
           places: [
             ...t.places,
             {
-              name: "Kinefuku Asakusa Sweets",
-              sub: "추가됨 · 디저트",
+              name: placeName,
+              sub: `추가됨 · ${subType}`,
               hasVid: recState === 2,
               fill: "#533483",
             },
