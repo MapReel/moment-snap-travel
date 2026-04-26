@@ -302,9 +302,6 @@ export function TravelMoment() {
     } catch (err) {
       console.warn("Camera unavailable, falling back to simulation", err);
       showToast("카메라 권한이 없어 시뮬레이션으로 진행해요");
-    } catch (err) {
-      console.warn("Camera unavailable, falling back to simulation", err);
-      showToast("카메라 권한이 없어 시뮬레이션으로 진행해요");
       runSimulatedRec();
     }
   };
