@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiStaticmapRouteImport } from './routes/api/staticmap'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiStaticmapRoute = ApiStaticmapRouteImport.update({
+  id: '/api/staticmap',
+  path: '/api/staticmap',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/staticmap': typeof ApiStaticmapRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/staticmap': typeof ApiStaticmapRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/staticmap': typeof ApiStaticmapRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/staticmap'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/staticmap'
+  id: '__root__' | '/' | '/api/staticmap'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiStaticmapRoute: typeof ApiStaticmapRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/staticmap': {
+      id: '/api/staticmap'
+      path: '/api/staticmap'
+      fullPath: '/api/staticmap'
+      preLoaderRoute: typeof ApiStaticmapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiStaticmapRoute: ApiStaticmapRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
