@@ -299,12 +299,50 @@ export function TravelMoment() {
           beginActualRecording(stream);
         }
       }, 1000);
-    } catch (err) {
-      console.warn("Camera unavailable, falling back to simulation", err);
-      showToast("카메라 권한이 없어 시뮬레이션으로 진행해요");
-      runSimulatedRec();
     }
   };
+
+  const beginActualRecording = (stream: MediaStream) => {
+    const mimeType = pickMimeType();
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    recorderRef.current = recorder;
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType || "video/webm" });
+      const url = URL.createObjectURL(blob);
+      setClips((c) => {
+        setActiveClipIdx(c.length);
+        return [...c, url];
+      });
+      setRecState(2);
+      stream.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      recorderRef.current = null;
+    };
+
+    recorder.start();
+
+    let elapsed = 0;
+    setRecProgress(0);
+    setRecRemain(3);
+    const blinkI = setInterval(() => setBlink((b) => !b), 500);
+    const recI = setInterval(() => {
+      elapsed += 100;
+      setRecProgress((elapsed / 3000) * 100);
+      setRecRemain(Math.max(0, Math.ceil((3000 - elapsed) / 1000)));
+      if (elapsed >= 3000) {
+        clearInterval(recI);
+        clearInterval(blinkI);
+        if (recorder.state === "recording") {
+          try {
+            recorder.stop();
+          } catch {}
+        }
+      }
+    }, 100);
 
   const runSimulatedRec = () => {
     setRecState(1);
