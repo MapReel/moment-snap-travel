@@ -727,7 +727,8 @@ function DetailView({
         </button>
         <button
           onClick={onAdd}
-          className="flex-1 rounded-full border border-primary bg-primary px-1 py-[7px] text-[11px] font-medium text-primary-foreground hover:bg-primary-strong"
+          disabled={!place}
+          className="flex-1 rounded-full border border-primary bg-primary px-1 py-[7px] text-[11px] font-medium text-primary-foreground hover:bg-primary-strong disabled:pointer-events-none disabled:opacity-40"
         >
           여행에 추가 +
         </button>
