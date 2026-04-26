@@ -375,6 +375,7 @@ export function TravelMoment() {
     setRecState(0);
     setRecProgress(0);
     setRecRemain(3);
+    setCountdown(0);
   };
 
   const trip = trips[currentTripIdx];
