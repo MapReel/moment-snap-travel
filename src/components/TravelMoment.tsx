@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import {
+  searchPlaces,
+  getPlaceDetails,
+  type PlaceSearchResult,
+  type PlaceDetails,
+} from "@/server/places.functions";
 
 type Place = {
   name: string;
@@ -68,6 +75,56 @@ export function TravelMoment() {
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
 
+  // Google Places state
+  const [searchQuery, setSearchQuery] = useState("Asakusa");
+  const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceDetails | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const searchPlacesFn = useServerFn(searchPlaces);
+  const getPlaceDetailsFn = useServerFn(getPlaceDetails);
+
+  // Debounced search
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchError(null);
+      return;
+    }
+    setSearchLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const { results, error } = await searchPlacesFn({ data: { query: q } });
+        setSearchResults(results);
+        setSearchError(error);
+      } catch (e) {
+        console.error(e);
+        setSearchError("검색 중 오류가 발생했어요");
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchQuery, searchPlacesFn]);
+
+  const openPlaceDetail = async (placeId: string) => {
+    setTab("detail");
+    setDetailLoading(true);
+    setSelectedPlace(null);
+    try {
+      const { place, error } = await getPlaceDetailsFn({ data: { placeId } });
+      if (error) showToast(error);
+      setSelectedPlace(place);
+    } catch (e) {
+      console.error(e);
+      showToast("상세 조회 중 오류가 발생했어요");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const showToast = (msg: string) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -130,11 +187,13 @@ export function TravelMoment() {
     setTimeout(() => setSheetOpen(false), 280);
   };
   const addToTrip = (idx: number) => {
+    const placeName = selectedPlace?.name ?? "장소";
+    const subType = selectedPlace?.primaryType ?? "장소";
     let already = false;
     setTrips((curr) =>
       curr.map((t, i) => {
         if (i !== idx) return t;
-        if (t.places.some((p) => p.name === "Kinefuku Asakusa Sweets")) {
+        if (t.places.some((p) => p.name === placeName)) {
           already = true;
           return t;
         }
@@ -143,8 +202,8 @@ export function TravelMoment() {
           places: [
             ...t.places,
             {
-              name: "Kinefuku Asakusa Sweets",
-              sub: "추가됨 · 디저트",
+              name: placeName,
+              sub: `추가됨 · ${subType}`,
               hasVid: recState === 2,
               fill: "#533483",
             },
@@ -329,9 +388,20 @@ export function TravelMoment() {
             ))}
           </div>
 
-          {tab === "search" && <SearchView onOpenDetail={() => setTab("detail")} />}
+          {tab === "search" && (
+            <SearchView
+              query={searchQuery}
+              setQuery={setSearchQuery}
+              loading={searchLoading}
+              error={searchError}
+              results={searchResults}
+              onOpenDetail={openPlaceDetail}
+            />
+          )}
           {tab === "detail" && (
             <DetailView
+              place={selectedPlace}
+              detailLoading={detailLoading}
               recState={recState}
               recRemain={recRemain}
               recProgress={recProgress}
@@ -343,6 +413,7 @@ export function TravelMoment() {
               onStartRec={startRec}
               onResetRec={resetRec}
               onAdd={openSheet}
+              onBack={() => setTab("search")}
             />
           )}
           {tab === "trip" && (
@@ -434,80 +505,102 @@ export function TravelMoment() {
 
 /* ---------------- Subviews ---------------- */
 
-function SearchView({ onOpenDetail }: { onOpenDetail: () => void }) {
-  const items = [
-    {
-      name: "Kinefuku Asakusa Sweets",
-      sub: "杵福 · Asakusa, Taito City, Tokyo",
-      badge: "영업중 · 17:00 마감",
-      closed: false,
-      onClick: onOpenDetail,
-    },
-    {
-      name: "Senso-ji Temple",
-      sub: "浅草寺 · 2-3-1 Asakusa, Taito",
-      badge: "영업중",
-      closed: false,
-    },
-    {
-      name: "Nakamise Shopping Street",
-      sub: "仲見世通り · Asakusa, Taito",
-      badge: "영업종료",
-      closed: true,
-    },
-  ];
+function SearchView({
+  query,
+  setQuery,
+  loading,
+  error,
+  results,
+  onOpenDetail,
+}: {
+  query: string;
+  setQuery: (s: string) => void;
+  loading: boolean;
+  error: string | null;
+  results: PlaceSearchResult[];
+  onOpenDetail: (placeId: string) => void;
+}) {
   return (
     <div>
       <div className="flex items-center gap-2 border-b border-border px-3 py-[10px]">
         <input
           className="flex-1 rounded-full border border-border bg-muted px-[14px] py-2 text-[13px] text-foreground outline-none"
           placeholder="장소 검색... (Google Places 연동)"
-          defaultValue="Asakusa"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
         />
-        <button
-          onClick={onOpenDetail}
+        <div
           className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full bg-primary"
           aria-label="검색"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-        </button>
-      </div>
-      {items.map((it, i) => (
-        <div
-          key={i}
-          className="flex cursor-pointer items-center gap-[10px] border-b border-border px-[14px] py-3 transition-colors hover:bg-muted"
-          onClick={it.onClick}
-        >
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft">
-            <PinIcon />
-          </div>
-          <div>
-            <div className="text-[13px] font-semibold text-foreground">{it.name}</div>
-            <div className="mt-px text-[11px] text-muted-foreground">{it.sub}</div>
-            <span
-              className={`mt-[3px] inline-block rounded-full px-[7px] py-[2px] text-[10px] ${
-                it.closed
-                  ? "bg-destructive/10 text-destructive"
-                  : "bg-primary-soft text-primary-strong"
-              }`}
-            >
-              {it.badge}
-            </span>
-          </div>
-          <div className="ml-auto text-[16px] text-border">›</div>
+          {loading ? (
+            <div className="h-[14px] w-[14px] animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          )}
         </div>
-      ))}
+      </div>
+
+      {error && (
+        <div className="border-b border-border bg-destructive/10 px-[14px] py-2 text-[11px] text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && results.length === 0 && !error && (
+        <div className="px-[14px] py-6 text-center text-[12px] text-muted-foreground">
+          {query.trim() ? "검색 결과가 없어요" : "장소명을 입력해보세요"}
+        </div>
+      )}
+
+      {results.map((it) => {
+        const open = it.openNow;
+        const badge =
+          open === true ? "영업중" : open === false ? "영업종료" : it.primaryType ?? "장소";
+        const closed = open === false;
+        return (
+          <div
+            key={it.placeId}
+            className="flex cursor-pointer items-center gap-[10px] border-b border-border px-[14px] py-3 transition-colors hover:bg-muted"
+            onClick={() => onOpenDetail(it.placeId)}
+          >
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+              <PinIcon />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold text-foreground">{it.name}</div>
+              <div className="mt-px truncate text-[11px] text-muted-foreground">
+                {it.formattedAddress}
+              </div>
+              <span
+                className={`mt-[3px] inline-block rounded-full px-[7px] py-[2px] text-[10px] ${
+                  closed
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-primary-soft text-primary-strong"
+                }`}
+              >
+                {badge}
+                {typeof it.rating === "number" ? ` · ★ ${it.rating.toFixed(1)}` : ""}
+              </span>
+            </div>
+            <div className="ml-2 text-[16px] text-border">›</div>
+          </div>
+        );
+      })}
+
       <div className="px-[14px] pb-[14px] pt-[10px] text-center text-[11px] text-muted-foreground">
-        Google Places API 연동 · 실시간 장소 정보
+        Google Places API · 실시간 장소 정보
       </div>
     </div>
   );
 }
 
 function DetailView({
+  place,
+  detailLoading,
   recState,
   recRemain,
   recProgress,
@@ -519,7 +612,10 @@ function DetailView({
   onStartRec,
   onResetRec,
   onAdd,
+  onBack,
 }: {
+  place: PlaceDetails | null;
+  detailLoading: boolean;
   recState: RecState;
   recRemain: number;
   recProgress: number;
@@ -531,50 +627,95 @@ function DetailView({
   onStartRec: () => void;
   onResetRec: () => void;
   onAdd: () => void;
+  onBack: () => void;
 }) {
   const recordedThumbs = clips.length;
   const activeClipUrl = clips[activeClipIdx];
   const playbackRef = useRef<HTMLVideoElement | null>(null);
 
+  const hasCoords = !!place && typeof place.lat === "number" && typeof place.lng === "number";
+  const mapSrc = hasCoords
+    ? `/api/staticmap?lat=${place!.lat}&lng=${place!.lng}&zoom=16&w=360&h=110&scale=2`
+    : null;
+
+  const ratingStars =
+    typeof place?.rating === "number"
+      ? "★".repeat(Math.round(place.rating)).padEnd(5, "☆")
+      : null;
+
   return (
     <div>
       <div className="flex items-center gap-2 border-b border-border px-[14px] pb-2 pt-[10px]">
-        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-border bg-muted">
+        <button
+          onClick={onBack}
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-border bg-muted"
+          aria-label="뒤로"
+        >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M15 18l-6-6 6-6" />
           </svg>
-        </div>
+        </button>
         <span className="flex-1 text-[13px] font-semibold text-foreground">장소 상세</span>
       </div>
 
       {/* Map */}
-      <div className="relative h-[110px] w-full overflow-hidden bg-[#C8E6C9]">
-        <svg viewBox="0 0 360 110" className="absolute h-full w-full" preserveAspectRatio="xMidYMid slice">
-          <rect width="360" height="110" fill="#C8E6C9" />
-          <rect x="80" y="15" width="60" height="30" rx="2" fill="#A5D6A7" opacity="0.7" />
-          <rect x="155" y="40" width="80" height="25" rx="2" fill="#A5D6A7" opacity="0.6" />
-          <rect x="40" y="60" width="50" height="35" rx="2" fill="#A5D6A7" opacity="0.6" />
-          <rect x="220" y="20" width="70" height="40" rx="2" fill="#A5D6A7" opacity="0.5" />
-          <rect x="100" y="55" width="110" height="8" rx="2" fill="white" opacity="0.7" />
-          <line x1="0" y1="37" x2="360" y2="37" stroke="white" strokeWidth="0.5" opacity="0.5" />
-          <line x1="0" y1="74" x2="360" y2="74" stroke="white" strokeWidth="0.5" opacity="0.5" />
-          <circle cx="175" cy="58" r="9" fill="#E24B4A" />
-          <circle cx="175" cy="58" r="4" fill="white" />
-        </svg>
+      <div className="relative h-[110px] w-full overflow-hidden bg-muted">
+        {mapSrc ? (
+          <img
+            src={mapSrc}
+            alt={`${place?.name ?? "장소"} 지도`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
+            {detailLoading ? "지도 불러오는 중..." : "지도 정보 없음"}
+          </div>
+        )}
         <div className="absolute bottom-[6px] right-2 rounded bg-white/85 px-[7px] py-[2px] text-[10px] font-semibold text-[#1B5E20]">
           Google Maps
         </div>
       </div>
 
       <div className="px-[14px] pb-2 pt-3">
-        <div className="mb-[3px] text-[17px] font-bold text-foreground">Kinefuku Asakusa Sweets</div>
-        <div className="mb-1 text-[12px] text-muted-foreground">
-          ★★★★☆ 4.4 (107) · 디저트 · ¥1–1,000 ·{" "}
-          <span className="font-semibold text-primary">영업중</span>
-        </div>
-        <div className="text-[11px] text-muted-foreground/70">
-          1 Chome-30-12 Asakusa, Taito City, Tokyo
-        </div>
+        {detailLoading && !place ? (
+          <>
+            <div className="mb-[6px] h-[18px] w-[60%] animate-pulse rounded bg-muted" />
+            <div className="mb-[6px] h-[12px] w-[80%] animate-pulse rounded bg-muted" />
+            <div className="h-[10px] w-[70%] animate-pulse rounded bg-muted" />
+          </>
+        ) : place ? (
+          <>
+            <div className="mb-[3px] text-[17px] font-bold text-foreground">{place.name}</div>
+            <div className="mb-1 text-[12px] text-muted-foreground">
+              {ratingStars && (
+                <>
+                  {ratingStars} {place.rating?.toFixed(1)}
+                  {typeof place.userRatingCount === "number" && ` (${place.userRatingCount})`}
+                  {" · "}
+                </>
+              )}
+              {place.primaryType && `${place.primaryType} · `}
+              <span
+                className={`font-semibold ${
+                  place.openNow === true
+                    ? "text-primary"
+                    : place.openNow === false
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {place.openNow === true
+                  ? "영업중"
+                  : place.openNow === false
+                    ? "영업종료"
+                    : "영업정보 없음"}
+              </span>
+            </div>
+            <div className="text-[11px] text-muted-foreground/70">{place.formattedAddress}</div>
+          </>
+        ) : (
+          <div className="text-[12px] text-muted-foreground">장소를 검색에서 선택해보세요.</div>
+        )}
       </div>
 
       <div className="flex gap-[6px] px-[14px] pb-3 pt-2">
@@ -586,7 +727,8 @@ function DetailView({
         </button>
         <button
           onClick={onAdd}
-          className="flex-1 rounded-full border border-primary bg-primary px-1 py-[7px] text-[11px] font-medium text-primary-foreground hover:bg-primary-strong"
+          disabled={!place}
+          className="flex-1 rounded-full border border-primary bg-primary px-1 py-[7px] text-[11px] font-medium text-primary-foreground hover:bg-primary-strong disabled:pointer-events-none disabled:opacity-40"
         >
           여행에 추가 +
         </button>
@@ -662,8 +804,8 @@ function DetailView({
                 <span className="rounded-full bg-primary/90 px-2 py-[3px] text-[10px] text-white">
                   REC · 3초
                 </span>
-                <span className="text-[11px] font-semibold text-white drop-shadow">
-                  Kinefuku
+                <span className="max-w-[60%] truncate text-[11px] font-semibold text-white drop-shadow">
+                  {place?.name ?? ""}
                 </span>
               </div>
             </>
