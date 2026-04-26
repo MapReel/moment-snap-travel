@@ -599,6 +599,8 @@ function SearchView({
 }
 
 function DetailView({
+  place,
+  detailLoading,
   recState,
   recRemain,
   recProgress,
@@ -610,7 +612,10 @@ function DetailView({
   onStartRec,
   onResetRec,
   onAdd,
+  onBack,
 }: {
+  place: PlaceDetails | null;
+  detailLoading: boolean;
   recState: RecState;
   recRemain: number;
   recProgress: number;
@@ -622,50 +627,95 @@ function DetailView({
   onStartRec: () => void;
   onResetRec: () => void;
   onAdd: () => void;
+  onBack: () => void;
 }) {
   const recordedThumbs = clips.length;
   const activeClipUrl = clips[activeClipIdx];
   const playbackRef = useRef<HTMLVideoElement | null>(null);
 
+  const hasCoords = !!place && typeof place.lat === "number" && typeof place.lng === "number";
+  const mapSrc = hasCoords
+    ? `/api/staticmap?lat=${place!.lat}&lng=${place!.lng}&zoom=16&w=360&h=110&scale=2`
+    : null;
+
+  const ratingStars =
+    typeof place?.rating === "number"
+      ? "★".repeat(Math.round(place.rating)).padEnd(5, "☆")
+      : null;
+
   return (
     <div>
       <div className="flex items-center gap-2 border-b border-border px-[14px] pb-2 pt-[10px]">
-        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-border bg-muted">
+        <button
+          onClick={onBack}
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-border bg-muted"
+          aria-label="뒤로"
+        >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M15 18l-6-6 6-6" />
           </svg>
-        </div>
+        </button>
         <span className="flex-1 text-[13px] font-semibold text-foreground">장소 상세</span>
       </div>
 
       {/* Map */}
-      <div className="relative h-[110px] w-full overflow-hidden bg-[#C8E6C9]">
-        <svg viewBox="0 0 360 110" className="absolute h-full w-full" preserveAspectRatio="xMidYMid slice">
-          <rect width="360" height="110" fill="#C8E6C9" />
-          <rect x="80" y="15" width="60" height="30" rx="2" fill="#A5D6A7" opacity="0.7" />
-          <rect x="155" y="40" width="80" height="25" rx="2" fill="#A5D6A7" opacity="0.6" />
-          <rect x="40" y="60" width="50" height="35" rx="2" fill="#A5D6A7" opacity="0.6" />
-          <rect x="220" y="20" width="70" height="40" rx="2" fill="#A5D6A7" opacity="0.5" />
-          <rect x="100" y="55" width="110" height="8" rx="2" fill="white" opacity="0.7" />
-          <line x1="0" y1="37" x2="360" y2="37" stroke="white" strokeWidth="0.5" opacity="0.5" />
-          <line x1="0" y1="74" x2="360" y2="74" stroke="white" strokeWidth="0.5" opacity="0.5" />
-          <circle cx="175" cy="58" r="9" fill="#E24B4A" />
-          <circle cx="175" cy="58" r="4" fill="white" />
-        </svg>
+      <div className="relative h-[110px] w-full overflow-hidden bg-muted">
+        {mapSrc ? (
+          <img
+            src={mapSrc}
+            alt={`${place?.name ?? "장소"} 지도`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">
+            {detailLoading ? "지도 불러오는 중..." : "지도 정보 없음"}
+          </div>
+        )}
         <div className="absolute bottom-[6px] right-2 rounded bg-white/85 px-[7px] py-[2px] text-[10px] font-semibold text-[#1B5E20]">
           Google Maps
         </div>
       </div>
 
       <div className="px-[14px] pb-2 pt-3">
-        <div className="mb-[3px] text-[17px] font-bold text-foreground">Kinefuku Asakusa Sweets</div>
-        <div className="mb-1 text-[12px] text-muted-foreground">
-          ★★★★☆ 4.4 (107) · 디저트 · ¥1–1,000 ·{" "}
-          <span className="font-semibold text-primary">영업중</span>
-        </div>
-        <div className="text-[11px] text-muted-foreground/70">
-          1 Chome-30-12 Asakusa, Taito City, Tokyo
-        </div>
+        {detailLoading && !place ? (
+          <>
+            <div className="mb-[6px] h-[18px] w-[60%] animate-pulse rounded bg-muted" />
+            <div className="mb-[6px] h-[12px] w-[80%] animate-pulse rounded bg-muted" />
+            <div className="h-[10px] w-[70%] animate-pulse rounded bg-muted" />
+          </>
+        ) : place ? (
+          <>
+            <div className="mb-[3px] text-[17px] font-bold text-foreground">{place.name}</div>
+            <div className="mb-1 text-[12px] text-muted-foreground">
+              {ratingStars && (
+                <>
+                  {ratingStars} {place.rating?.toFixed(1)}
+                  {typeof place.userRatingCount === "number" && ` (${place.userRatingCount})`}
+                  {" · "}
+                </>
+              )}
+              {place.primaryType && `${place.primaryType} · `}
+              <span
+                className={`font-semibold ${
+                  place.openNow === true
+                    ? "text-primary"
+                    : place.openNow === false
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {place.openNow === true
+                  ? "영업중"
+                  : place.openNow === false
+                    ? "영업종료"
+                    : "영업정보 없음"}
+              </span>
+            </div>
+            <div className="text-[11px] text-muted-foreground/70">{place.formattedAddress}</div>
+          </>
+        ) : (
+          <div className="text-[12px] text-muted-foreground">장소를 검색에서 선택해보세요.</div>
+        )}
       </div>
 
       <div className="flex gap-[6px] px-[14px] pb-3 pt-2">
