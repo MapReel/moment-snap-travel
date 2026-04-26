@@ -20,28 +20,7 @@ type Trip = {
   places: Place[];
 };
 
-const initialTrips: Trip[] = [
-  {
-    name: "도쿄 여행",
-    date: "2024.11.08 – 11.12",
-    color: "#1D9E75",
-    places: [
-      { name: "Senso-ji Temple", sub: "11.08 · 신사", hasVid: true, fill: "#5DCAA5" },
-      { name: "Nakamise Shopping Street", sub: "11.08 · 쇼핑", hasVid: true, fill: "#7F77DD" },
-      { name: "Kinefuku Asakusa Sweets", sub: "11.09 · 디저트", hasVid: true, fill: "#533483" },
-      { name: "Tokyo Skytree", sub: "11.09 · 전망대", hasVid: false, fill: "#888780" },
-    ],
-  },
-  {
-    name: "오사카·교토 여행",
-    date: "2024.08.20 – 08.25",
-    color: "#7F77DD",
-    places: [
-      { name: "Fushimi Inari", sub: "08.21 · 신사", hasVid: true, fill: "#E24B4A" },
-      { name: "Dotonbori", sub: "08.22 · 관광", hasVid: false, fill: "#EF9F27" },
-    ],
-  },
-];
+const initialTrips: Trip[] = [];
 
 type Tab = "search" | "detail" | "trip";
 type TripView = "list" | "new" | "detail";
