@@ -505,74 +505,94 @@ export function TravelMoment() {
 
 /* ---------------- Subviews ---------------- */
 
-function SearchView({ onOpenDetail }: { onOpenDetail: () => void }) {
-  const items = [
-    {
-      name: "Kinefuku Asakusa Sweets",
-      sub: "杵福 · Asakusa, Taito City, Tokyo",
-      badge: "영업중 · 17:00 마감",
-      closed: false,
-      onClick: onOpenDetail,
-    },
-    {
-      name: "Senso-ji Temple",
-      sub: "浅草寺 · 2-3-1 Asakusa, Taito",
-      badge: "영업중",
-      closed: false,
-    },
-    {
-      name: "Nakamise Shopping Street",
-      sub: "仲見世通り · Asakusa, Taito",
-      badge: "영업종료",
-      closed: true,
-    },
-  ];
+function SearchView({
+  query,
+  setQuery,
+  loading,
+  error,
+  results,
+  onOpenDetail,
+}: {
+  query: string;
+  setQuery: (s: string) => void;
+  loading: boolean;
+  error: string | null;
+  results: PlaceSearchResult[];
+  onOpenDetail: (placeId: string) => void;
+}) {
   return (
     <div>
       <div className="flex items-center gap-2 border-b border-border px-3 py-[10px]">
         <input
           className="flex-1 rounded-full border border-border bg-muted px-[14px] py-2 text-[13px] text-foreground outline-none"
           placeholder="장소 검색... (Google Places 연동)"
-          defaultValue="Asakusa"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
         />
-        <button
-          onClick={onOpenDetail}
+        <div
           className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full bg-primary"
           aria-label="검색"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-        </button>
-      </div>
-      {items.map((it, i) => (
-        <div
-          key={i}
-          className="flex cursor-pointer items-center gap-[10px] border-b border-border px-[14px] py-3 transition-colors hover:bg-muted"
-          onClick={it.onClick}
-        >
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft">
-            <PinIcon />
-          </div>
-          <div>
-            <div className="text-[13px] font-semibold text-foreground">{it.name}</div>
-            <div className="mt-px text-[11px] text-muted-foreground">{it.sub}</div>
-            <span
-              className={`mt-[3px] inline-block rounded-full px-[7px] py-[2px] text-[10px] ${
-                it.closed
-                  ? "bg-destructive/10 text-destructive"
-                  : "bg-primary-soft text-primary-strong"
-              }`}
-            >
-              {it.badge}
-            </span>
-          </div>
-          <div className="ml-auto text-[16px] text-border">›</div>
+          {loading ? (
+            <div className="h-[14px] w-[14px] animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          )}
         </div>
-      ))}
+      </div>
+
+      {error && (
+        <div className="border-b border-border bg-destructive/10 px-[14px] py-2 text-[11px] text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && results.length === 0 && !error && (
+        <div className="px-[14px] py-6 text-center text-[12px] text-muted-foreground">
+          {query.trim() ? "검색 결과가 없어요" : "장소명을 입력해보세요"}
+        </div>
+      )}
+
+      {results.map((it) => {
+        const open = it.openNow;
+        const badge =
+          open === true ? "영업중" : open === false ? "영업종료" : it.primaryType ?? "장소";
+        const closed = open === false;
+        return (
+          <div
+            key={it.placeId}
+            className="flex cursor-pointer items-center gap-[10px] border-b border-border px-[14px] py-3 transition-colors hover:bg-muted"
+            onClick={() => onOpenDetail(it.placeId)}
+          >
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+              <PinIcon />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold text-foreground">{it.name}</div>
+              <div className="mt-px truncate text-[11px] text-muted-foreground">
+                {it.formattedAddress}
+              </div>
+              <span
+                className={`mt-[3px] inline-block rounded-full px-[7px] py-[2px] text-[10px] ${
+                  closed
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-primary-soft text-primary-strong"
+                }`}
+              >
+                {badge}
+                {typeof it.rating === "number" ? ` · ★ ${it.rating.toFixed(1)}` : ""}
+              </span>
+            </div>
+            <div className="ml-2 text-[16px] text-border">›</div>
+          </div>
+        );
+      })}
+
       <div className="px-[14px] pb-[14px] pt-[10px] text-center text-[11px] text-muted-foreground">
-        Google Places API 연동 · 실시간 장소 정보
+        Google Places API · 실시간 장소 정보
       </div>
     </div>
   );
