@@ -804,8 +804,8 @@ function DetailView({
                 <span className="rounded-full bg-primary/90 px-2 py-[3px] text-[10px] text-white">
                   REC · 3초
                 </span>
-                <span className="text-[11px] font-semibold text-white drop-shadow">
-                  Kinefuku
+                <span className="max-w-[60%] truncate text-[11px] font-semibold text-white drop-shadow">
+                  {place?.name ?? ""}
                 </span>
               </div>
             </>
