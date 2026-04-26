@@ -622,6 +622,7 @@ function DetailView({
   detailLoading,
   recState,
   recRemain,
+  countdown,
   recProgress,
   blink,
   clips,
@@ -637,6 +638,7 @@ function DetailView({
   detailLoading: boolean;
   recState: RecState;
   recRemain: number;
+  countdown: number;
   recProgress: number;
   blink: boolean;
   clips: string[];
