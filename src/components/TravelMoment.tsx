@@ -63,6 +63,7 @@ export function TravelMoment() {
   const [recRemain, setRecRemain] = useState(3);
   const [recProgress, setRecProgress] = useState(0);
   const [blink, setBlink] = useState(true);
+  const [countdown, setCountdown] = useState<number>(0); // 3,2,1 → 0 means not counting
   const [clips, setClips] = useState<string[]>([]); // object URLs of recorded videos
   const [activeClipIdx, setActiveClipIdx] = useState<number>(0);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
