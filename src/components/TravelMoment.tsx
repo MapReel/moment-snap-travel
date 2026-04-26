@@ -347,6 +347,7 @@ export function TravelMoment() {
         }
       }
     }, 100);
+  };
 
   const runSimulatedRec = () => {
     setRecState(1);
