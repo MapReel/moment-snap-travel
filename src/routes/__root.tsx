@@ -29,14 +29,18 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Mapreel" },
+      { name: "description", content: "Travel Moments Captured lets you record and organize short videos of your travel experiences at specific locations." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Mapreel" },
+      { property: "og:description", content: "Travel Moments Captured lets you record and organize short videos of your travel experiences at specific locations." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Mapreel" },
+      { name: "twitter:description", content: "Travel Moments Captured lets you record and organize short videos of your travel experiences at specific locations." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1dbd1b70-c1c9-4380-b296-fd37b437237f/id-preview-8db49255--194f9035-11f9-4b55-a034-6ab35ddbbaf0.lovable.app-1777181322950.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1dbd1b70-c1c9-4380-b296-fd37b437237f/id-preview-8db49255--194f9035-11f9-4b55-a034-6ab35ddbbaf0.lovable.app-1777181322950.png" },
     ],
     links: [
       {
