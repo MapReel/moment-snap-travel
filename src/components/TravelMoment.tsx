@@ -56,7 +56,7 @@ export function TravelMoment() {
   const [dateEnd, setDateEnd] = useState("");
 
   // Google Places state
-  const [searchQuery, setSearchQuery] = useState("Asakusa");
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
