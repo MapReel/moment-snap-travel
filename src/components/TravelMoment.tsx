@@ -1,19 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useNavigate } from "@tanstack/react-router";
 import {
   searchPlaces,
   getPlaceDetails,
   type PlaceSearchResult,
   type PlaceDetails,
 } from "@/server/places.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 type Place = {
+  id?: string;
   name: string;
   sub: string;
   hasVid: boolean;
   fill: string;
+  videoUrl?: string;
 };
 type Trip = {
+  id?: string;
   name: string;
   date: string;
   color: string;
