@@ -73,6 +73,65 @@ export function TravelMoment() {
   const searchPlacesFn = useServerFn(searchPlaces);
   const getPlaceDetailsFn = useServerFn(getPlaceDetails);
 
+  // Auth gate
+  useEffect(() => {
+    if (!authLoading && !user) navigate({ to: "/auth" });
+  }, [authLoading, user, navigate]);
+
+  // Load trips & places from DB
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data: tripsData, error: tErr } = await supabase
+        .from("trips")
+        .select("id,name,date_label,color,created_at")
+        .order("created_at", { ascending: true });
+      if (tErr) { console.error(tErr); return; }
+      const ids = (tripsData ?? []).map((t) => t.id);
+      const placesByTrip: Record<string, any[]> = {};
+      const videosByPlace: Record<string, string> = {};
+      if (ids.length) {
+        const { data: placesData } = await supabase
+          .from("trip_places")
+          .select("id,trip_id,name,sub,place_id")
+          .in("trip_id", ids);
+        const placeIds = (placesData ?? []).map((p) => p.id);
+        if (placeIds.length) {
+          const { data: vids } = await supabase
+            .from("place_videos")
+            .select("trip_place_id,storage_path")
+            .in("trip_place_id", placeIds);
+          for (const v of vids ?? []) {
+            if (!v.trip_place_id) continue;
+            const { data: signed } = await supabase.storage
+              .from("videos")
+              .createSignedUrl(v.storage_path, 3600);
+            if (signed?.signedUrl) videosByPlace[v.trip_place_id] = signed.signedUrl;
+          }
+        }
+        for (const p of placesData ?? []) {
+          (placesByTrip[p.trip_id] ||= []).push(p);
+        }
+      }
+      setTrips(
+        (tripsData ?? []).map((t) => ({
+          id: t.id,
+          name: t.name,
+          date: t.date_label ?? "기간 미설정",
+          color: t.color,
+          places: (placesByTrip[t.id] ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            sub: p.sub ?? "",
+            hasVid: !!videosByPlace[p.id],
+            fill: t.color,
+            videoUrl: videosByPlace[p.id],
+          })),
+        }))
+      );
+    })();
+  }, [user]);
+
   // Debounced search
   useEffect(() => {
     const q = searchQuery.trim();
