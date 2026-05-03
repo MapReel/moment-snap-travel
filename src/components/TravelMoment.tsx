@@ -1,19 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useNavigate } from "@tanstack/react-router";
 import {
   searchPlaces,
   getPlaceDetails,
   type PlaceSearchResult,
   type PlaceDetails,
 } from "@/server/places.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 type Place = {
+  id?: string;
   name: string;
   sub: string;
   hasVid: boolean;
   fill: string;
+  videoUrl?: string;
 };
 type Trip = {
+  id?: string;
   name: string;
   date: string;
   color: string;
@@ -27,6 +33,8 @@ type TripView = "list" | "new" | "detail";
 type RecState = 0 | 1 | 2;
 
 export function TravelMoment() {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("search");
   const [trips, setTrips] = useState<Trip[]>(initialTrips);
   const [tripView, setTripView] = useState<TripView>("list");
@@ -64,6 +72,65 @@ export function TravelMoment() {
   const [detailLoading, setDetailLoading] = useState(false);
   const searchPlacesFn = useServerFn(searchPlaces);
   const getPlaceDetailsFn = useServerFn(getPlaceDetails);
+
+  // Auth gate
+  useEffect(() => {
+    if (!authLoading && !user) navigate({ to: "/auth" });
+  }, [authLoading, user, navigate]);
+
+  // Load trips & places from DB
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data: tripsData, error: tErr } = await supabase
+        .from("trips")
+        .select("id,name,date_label,color,created_at")
+        .order("created_at", { ascending: true });
+      if (tErr) { console.error(tErr); return; }
+      const ids = (tripsData ?? []).map((t) => t.id);
+      const placesByTrip: Record<string, any[]> = {};
+      const videosByPlace: Record<string, string> = {};
+      if (ids.length) {
+        const { data: placesData } = await supabase
+          .from("trip_places")
+          .select("id,trip_id,name,sub,place_id")
+          .in("trip_id", ids);
+        const placeIds = (placesData ?? []).map((p) => p.id);
+        if (placeIds.length) {
+          const { data: vids } = await supabase
+            .from("place_videos")
+            .select("trip_place_id,storage_path")
+            .in("trip_place_id", placeIds);
+          for (const v of vids ?? []) {
+            if (!v.trip_place_id) continue;
+            const { data: signed } = await supabase.storage
+              .from("videos")
+              .createSignedUrl(v.storage_path, 3600);
+            if (signed?.signedUrl) videosByPlace[v.trip_place_id] = signed.signedUrl;
+          }
+        }
+        for (const p of placesData ?? []) {
+          (placesByTrip[p.trip_id] ||= []).push(p);
+        }
+      }
+      setTrips(
+        (tripsData ?? []).map((t) => ({
+          id: t.id,
+          name: t.name,
+          date: t.date_label ?? "기간 미설정",
+          color: t.color,
+          places: (placesByTrip[t.id] ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            sub: p.sub ?? "",
+            hasVid: !!videosByPlace[p.id],
+            fill: t.color,
+            videoUrl: videosByPlace[p.id],
+          })),
+        }))
+      );
+    })();
+  }, [user]);
 
   // Debounced search
   useEffect(() => {
@@ -135,21 +202,30 @@ export function TravelMoment() {
     setTimeout(() => showToast("여행 영상 저장 완료!"), 1800);
   };
 
-  const createTrip = () => {
+  const createTrip = async () => {
     const name = newTripName.trim();
     if (!name) {
       showToast("여행 이름을 입력해주세요");
       return;
     }
+    if (!user) { showToast("로그인이 필요해요"); return; }
     const colors = ["#D4537E", "#BA7517", "#378ADD", "#E24B4A", "#533483"];
     const date =
       dateStart && dateEnd
         ? `${dateStart.replace(/-/g, ".")} – ${dateEnd.replace(/-/g, ".")}`
         : "기간 미설정";
-    setTrips((t) => [
-      ...t,
-      { name, date, color: colors[t.length % colors.length], places: [] },
-    ]);
+    const color = colors[trips.length % colors.length];
+    const { data, error } = await supabase
+      .from("trips")
+      .insert({ user_id: user.id, name, date_label: date, color })
+      .select()
+      .single();
+    if (error || !data) {
+      console.error(error);
+      showToast("여행 저장 실패");
+      return;
+    }
+    setTrips((t) => [...t, { id: data.id, name, date, color, places: [] }]);
     setNewTripName("");
     setDateStart("");
     setDateEnd("");
@@ -166,36 +242,85 @@ export function TravelMoment() {
     setSheetVisible(false);
     setTimeout(() => setSheetOpen(false), 280);
   };
-  const addToTrip = (idx: number) => {
+  const addToTrip = async (idx: number) => {
     const placeName = selectedPlace?.name ?? "장소";
     const subType = selectedPlace?.primaryType ?? "장소";
-    let already = false;
-    setTrips((curr) =>
-      curr.map((t, i) => {
-        if (i !== idx) return t;
-        if (t.places.some((p) => p.name === placeName)) {
-          already = true;
-          return t;
-        }
-        return {
-          ...t,
-          places: [
-            ...t.places,
-            {
-              name: placeName,
-              sub: `추가됨 · ${subType}`,
-              hasVid: recState === 2,
-              fill: "#533483",
-            },
-          ],
-        };
+    const trip = trips[idx];
+    if (!trip?.id || !user) { showToast("저장 불가"); return; }
+    if (trip.places.some((p) => p.name === placeName)) {
+      closeSheet();
+      setTimeout(() => showToast("이미 추가된 장소예요"), 0);
+      return;
+    }
+    const sub = `추가됨 · ${subType}`;
+    const { data: placeRow, error: pErr } = await supabase
+      .from("trip_places")
+      .insert({
+        trip_id: trip.id,
+        user_id: user.id,
+        place_id: selectedPlace?.placeId ?? null,
+        name: placeName,
+        sub,
       })
+      .select()
+      .single();
+    if (pErr || !placeRow) {
+      console.error(pErr);
+      showToast("장소 저장 실패");
+      return;
+    }
+
+    // Upload latest recorded clip if available
+    let videoUrl: string | undefined;
+    const latestClip = clips[clips.length - 1];
+    if (latestClip && latestClip.startsWith("blob:")) {
+      try {
+        const blob = await (await fetch(latestClip)).blob();
+        const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+        const path = `${user.id}/${placeRow.id}-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("videos")
+          .upload(path, blob, { contentType: blob.type, upsert: false });
+        if (upErr) throw upErr;
+        await supabase.from("place_videos").insert({
+          user_id: user.id,
+          trip_place_id: placeRow.id,
+          place_id: selectedPlace?.placeId ?? null,
+          place_name: placeName,
+          storage_path: path,
+        });
+        const { data: signed } = await supabase.storage
+          .from("videos")
+          .createSignedUrl(path, 3600);
+        videoUrl = signed?.signedUrl;
+      } catch (e) {
+        console.error("video upload failed", e);
+        showToast("영상 업로드 실패");
+      }
+    }
+
+    setTrips((curr) =>
+      curr.map((t, i) =>
+        i !== idx
+          ? t
+          : {
+              ...t,
+              places: [
+                ...t.places,
+                {
+                  id: placeRow.id,
+                  name: placeName,
+                  sub,
+                  hasVid: !!videoUrl,
+                  fill: t.color,
+                  videoUrl,
+                },
+              ],
+            }
+      )
     );
     closeSheet();
-    setTimeout(
-      () => showToast(already ? "이미 추가된 장소예요" : `"${trips[idx].name}"에 추가됐어요`),
-      0
-    );
+    setTimeout(() => showToast(`"${trip.name}"에 추가됐어요`), 0);
   };
 
   // Cleanup object URLs on unmount
@@ -359,14 +484,27 @@ export function TravelMoment() {
 
   const trip = trips[currentTripIdx];
 
+  if (authLoading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-phone-bg text-sm text-muted-foreground">
+        불러오는 중...
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-start justify-center bg-phone-bg px-0 py-6 pb-12">
       <div className="w-[360px] rounded-[44px] border border-border bg-phone-bezel p-3 shadow-[0_20px_60px_rgba(0,0,0,0.15)]">
         <div className="relative min-h-[640px] overflow-hidden rounded-[34px] bg-card">
           {/* Status bar */}
-          <div className="flex justify-between bg-card px-[18px] pb-1 pt-[10px]">
-            <span className="text-[11px] text-muted-foreground">12:52</span>
-            <span className="text-[11px] text-muted-foreground">Seoul</span>
+          <div className="flex items-center justify-between bg-card px-[18px] pb-1 pt-[10px]">
+            <span className="text-[11px] text-muted-foreground">{user?.email ?? "12:52"}</span>
+            <button
+              onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/auth" }); }}
+              className="text-[11px] text-primary hover:underline"
+            >
+              로그아웃
+            </button>
           </div>
           {/* Tabs */}
           <div className="flex border-b border-border bg-card">
