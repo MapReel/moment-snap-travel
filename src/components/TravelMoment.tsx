@@ -33,6 +33,8 @@ type TripView = "list" | "new" | "detail";
 type RecState = 0 | 1 | 2;
 
 export function TravelMoment() {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("search");
   const [trips, setTrips] = useState<Trip[]>(initialTrips);
   const [tripView, setTripView] = useState<TripView>("list");
