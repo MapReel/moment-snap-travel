@@ -484,6 +484,14 @@ export function TravelMoment() {
 
   const trip = trips[currentTripIdx];
 
+  if (authLoading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-phone-bg text-sm text-muted-foreground">
+        불러오는 중...
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-start justify-center bg-phone-bg px-0 py-6 pb-12">
       <div className="w-[360px] rounded-[44px] border border-border bg-phone-bezel p-3 shadow-[0_20px_60px_rgba(0,0,0,0.15)]">
