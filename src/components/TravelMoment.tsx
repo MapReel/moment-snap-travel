@@ -489,9 +489,14 @@ export function TravelMoment() {
       <div className="w-[360px] rounded-[44px] border border-border bg-phone-bezel p-3 shadow-[0_20px_60px_rgba(0,0,0,0.15)]">
         <div className="relative min-h-[640px] overflow-hidden rounded-[34px] bg-card">
           {/* Status bar */}
-          <div className="flex justify-between bg-card px-[18px] pb-1 pt-[10px]">
-            <span className="text-[11px] text-muted-foreground">12:52</span>
-            <span className="text-[11px] text-muted-foreground">Seoul</span>
+          <div className="flex items-center justify-between bg-card px-[18px] pb-1 pt-[10px]">
+            <span className="text-[11px] text-muted-foreground">{user?.email ?? "12:52"}</span>
+            <button
+              onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/auth" }); }}
+              className="text-[11px] text-primary hover:underline"
+            >
+              로그아웃
+            </button>
           </div>
           {/* Tabs */}
           <div className="flex border-b border-border bg-card">
