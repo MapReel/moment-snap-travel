@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { lovable } from "@/integrations/lovable";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
